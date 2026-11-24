@@ -1,4 +1,4 @@
-import { createSeededRandom, type RandomSource } from './random.js';
+import { createSeededRandom, type RandomSource } from '../random.js';
 import type {
   CombatLogEntry,
   CombatOutcome,

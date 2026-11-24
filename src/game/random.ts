@@ -15,3 +15,14 @@ export function createSeededRandom(seed: number): RandomSource {
     },
   };
 }
+
+export function deriveSeed(seed: number, stream: string): number {
+  let hash = (2_166_136_261 ^ seed) >>> 0;
+
+  for (let index = 0; index < stream.length; index += 1) {
+    hash ^= stream.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+
+  return hash >>> 0;
+}
