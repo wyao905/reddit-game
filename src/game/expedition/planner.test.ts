@@ -5,8 +5,9 @@ import type { ExpeditionPlanConfig, PlannedEncounter } from './types.js';
 const areaLevels = { minimum: 4, maximum: 5 };
 const sevenEncounterConfig: ExpeditionPlanConfig = {
   normalCombatCount: 4,
-  normalEventCount: 2,
+  normalEventPools: ['risk', 'rest'],
   rareEventChance: 0,
+  rareEventPool: 'rare',
 };
 
 describe('generateExpeditionPlan', () => {
@@ -20,36 +21,30 @@ describe('generateExpeditionPlan', () => {
   it('builds the current seven-slot structure without adjacent events', () => {
     const plan = generateExpeditionPlan(42, areaLevels, sevenEncounterConfig);
     const normalEvents = plan.encounters.filter(
-      (encounter) => encounter.kind === 'event' && encounter.rarity === 'normal'
+      (encounter) => encounter.kind === 'event'
     );
     const combats = plan.encounters.filter((encounter) => encounter.kind === 'combat');
 
     expect(plan.encounters).toHaveLength(7);
     expect(normalEvents).toHaveLength(2);
-    expect(combats).toHaveLength(5);
+    expect(combats).toHaveLength(4);
+    expect(plan.encounters.at(-1)?.kind).toBe('final');
     expect(hasAdjacentEvents(plan.encounters)).toBe(false);
   });
 
-  it('uses a rare event or an upper-bound combat for the final slot', () => {
-    const combatPlan = generateExpeditionPlan(99, areaLevels, {
+  it('leaves the final rare-event roll unresolved in the plan', () => {
+    const plan = generateExpeditionPlan(99, areaLevels, {
       ...sevenEncounterConfig,
-      rareEventChance: 0,
-    });
-    const rarePlan = generateExpeditionPlan(99, areaLevels, {
-      ...sevenEncounterConfig,
-      rareEventChance: 1,
+      rareEventChance: 0.2,
     });
 
-    expect(combatPlan.encounters.at(-1)).toMatchObject({
-      kind: 'combat',
+    expect(plan.encounters.at(-1)).toMatchObject({
+      kind: 'final',
       level: 5,
       difficulty: 'upper-bound',
+      rareEventChance: 0.2,
+      rareEventPool: 'rare',
     });
-    expect(rarePlan.encounters.at(-1)).toMatchObject({
-      kind: 'event',
-      rarity: 'rare',
-    });
-    expect(hasAdjacentEvents(rarePlan.encounters)).toBe(false);
   });
 
   it('keeps normal combat levels inside the area range', () => {
@@ -67,7 +62,7 @@ describe('generateExpeditionPlan', () => {
     }
   });
 
-  it('keeps combat and event sequences stable across final outcomes', () => {
+  it('keeps combat and event sequences stable across final probabilities', () => {
     const combatPlan = generateExpeditionPlan(777, areaLevels, {
       ...sevenEncounterConfig,
       rareEventChance: 0,
@@ -88,26 +83,27 @@ describe('generateExpeditionPlan', () => {
   it('supports changing the encounter counts', () => {
     const plan = generateExpeditionPlan(12, areaLevels, {
       normalCombatCount: 2,
-      normalEventCount: 1,
+      normalEventPools: ['risk'],
       rareEventChance: 0,
+      rareEventPool: 'rare',
     });
 
     expect(plan.encounters).toHaveLength(4);
     expect(hasAdjacentEvents(plan.encounters)).toBe(false);
   });
 
-  it('allows the final combat to separate a trailing normal event', () => {
+  it('keeps the slot before the unresolved final encounter as combat', () => {
     const plan = generateExpeditionPlan(12, areaLevels, {
       normalCombatCount: 1,
-      normalEventCount: 2,
+      normalEventPools: ['risk'],
       rareEventChance: 0,
+      rareEventPool: 'rare',
     });
 
     expect(plan.encounters.map((encounter) => encounter.kind)).toEqual([
       'event',
       'combat',
-      'event',
-      'combat',
+      'final',
     ]);
     expect(hasAdjacentEvents(plan.encounters)).toBe(false);
   });
@@ -116,8 +112,9 @@ describe('generateExpeditionPlan', () => {
     expect(() =>
       generateExpeditionPlan(12, areaLevels, {
         normalCombatCount: 1,
-        normalEventCount: 2,
+        normalEventPools: ['risk', 'rest'],
         rareEventChance: 1,
+        rareEventPool: 'rare',
       })
     ).toThrow('Encounter counts would force adjacent events.');
   });
@@ -140,9 +137,7 @@ function normalSequence(
         return false;
       }
 
-      return encounter.kind === 'combat'
-        ? encounter.difficulty === 'normal'
-        : encounter.rarity === 'normal';
+      return encounter.kind === kind;
     })
     .map((encounter) => ({
       seed: encounter.seed,

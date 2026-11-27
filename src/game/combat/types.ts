@@ -1,20 +1,23 @@
 export type CombatSide = 'squad' | 'enemy';
+export type DamageType = 'physical' | 'magic';
 
 export type CombatSkill =
   | {
       kind: 'taunt';
       name: string;
       damageMultiplier: number;
+      damageType: DamageType;
     }
   | {
       kind: 'damage';
       name: string;
       damageMultiplier: number;
+      damageType: DamageType;
     }
   | {
       kind: 'heal';
       name: string;
-      healing: number;
+      healingMultiplier: number;
     };
 
 export interface CombatantDefinition {
@@ -24,6 +27,12 @@ export interface CombatantDefinition {
   maxHealth: number;
   attack: number;
   defense: number;
+  magic: number;
+  resistance: number;
+  speed: number;
+  criticalChance: number;
+  criticalDamage: number;
+  basicAttackType: DamageType;
   skill?: CombatSkill;
 }
 
@@ -32,6 +41,7 @@ export interface EncounterDefinition {
   name: string;
   squad: CombatantDefinition[];
   enemies: CombatantDefinition[];
+  startingHealth?: Record<string, number>;
   maxRounds?: number;
 }
 
@@ -47,7 +57,11 @@ export interface CombatLogEntry {
   actorId: string;
   action: string;
   targetIds: string[];
+  effect: 'damage' | 'heal';
   amount?: number;
+  damageType?: DamageType;
+  critical?: boolean;
+  targetHealthAfter: number;
   message: string;
 }
 

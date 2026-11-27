@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "customConditions": ["browser"],
+    "outDir": "../dist/types/client",
+    "rootDir": "../src/client",
+    "tsBuildInfoFile": "../dist/types/client/tsconfig.tsbuildinfo"
+  },
+  "include": ["../src/client/**/*"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}

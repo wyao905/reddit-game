@@ -28,6 +28,20 @@ describe('resolveCombat', () => {
     expect(golemEncounter.enemies).not.toHaveProperty('0.health');
   });
 
+  it('starts combat with carried squad health and keeps downed members inactive', () => {
+    const outcome = resolveCombat(
+      {
+        ...wolfPackEncounter,
+        startingHealth: { mara: 12, oren: 0, tavi: 20 },
+      },
+      5
+    );
+
+    expect(outcome.log.some((entry) => entry.actorId === 'oren')).toBe(false);
+    expect(outcome.squad.find((member) => member.id === 'oren')?.health).toBe(0);
+    expect(outcome.squad.find((member) => member.id === 'mara')?.health).toBeLessThanOrEqual(12);
+  });
+
   it('rejects encounters without both sides', () => {
     const invalid: EncounterDefinition = {
       id: 'invalid',

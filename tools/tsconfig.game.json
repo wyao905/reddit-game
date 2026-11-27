@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "outDir": "../dist/types/game",
+    "rootDir": "../src/game",
+    "tsBuildInfoFile": "../dist/types/game/tsconfig.tsbuildinfo"
+  },
+  "include": ["../src/game/**/*"]
+}

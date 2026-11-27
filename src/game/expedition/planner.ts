@@ -6,6 +6,7 @@ import type {
   PlannedCombatEncounter,
   PlannedEncounter,
   PlannedEventEncounter,
+  PlannedFinalEncounter,
 } from './types.js';
 
 export function generateExpeditionPlan(
@@ -15,13 +16,10 @@ export function generateExpeditionPlan(
 ): ExpeditionPlan {
   assertInputs(seed, areaLevels, config);
 
-  const finalRandom = createSeededRandom(deriveSeed(seed, 'final-roll'));
-  const finalIsRareEvent = finalRandom.next() < config.rareEventChance;
   const layoutRandom = createSeededRandom(deriveSeed(seed, 'layout'));
   const eventGaps = chooseEventGaps(
     config.normalCombatCount,
-    config.normalEventCount,
-    finalIsRareEvent,
+    config.normalEventPools.length,
     layoutRandom.next
   );
 
@@ -34,7 +32,16 @@ export function generateExpeditionPlan(
     combatIndex += 1
   ) {
     if (eventGaps.has(combatIndex)) {
-      encounters.push(createNormalEvent(seed, eventNumber, encounters.length + 1));
+      const eventPool = config.normalEventPools[eventNumber - 1];
+      if (!eventPool) throw new Error('Event pool configuration is incomplete.');
+      encounters.push(
+        createEventSlot(
+          seed,
+          eventNumber,
+          encounters.length + 1,
+          eventPool
+        )
+      );
       eventNumber += 1;
     }
 
@@ -43,19 +50,15 @@ export function generateExpeditionPlan(
     );
   }
 
-  if (eventGaps.has(config.normalCombatCount)) {
-    encounters.push(createNormalEvent(seed, eventNumber, encounters.length + 1));
-  }
-
   encounters.push(
-    finalIsRareEvent
-      ? createRareEvent(seed, config.normalEventCount + 1, encounters.length + 1)
-      : createFinalCombat(
-          seed,
-          config.normalCombatCount + 1,
-          encounters.length + 1,
-          areaLevels.maximum
-        )
+    createFinalSlot(
+      seed,
+      config.normalCombatCount + 1,
+      encounters.length + 1,
+      areaLevels.maximum,
+      config.rareEventChance,
+      config.rareEventPool
+    )
   );
 
   return { seed, encounters };
@@ -64,11 +67,9 @@ export function generateExpeditionPlan(
 function chooseEventGaps(
   combatCount: number,
   eventCount: number,
-  finalIsRareEvent: boolean,
   nextRandom: () => number
 ): Set<number> {
-  const gapCount = finalIsRareEvent ? combatCount : combatCount + 1;
-  const gaps = Array.from({ length: gapCount }, (_, index) => index);
+  const gaps = Array.from({ length: combatCount }, (_, index) => index);
 
   for (let index = gaps.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(nextRandom() * (index + 1));
@@ -108,47 +109,38 @@ function createNormalCombat(
   };
 }
 
-function createFinalCombat(
+function createFinalSlot(
   expeditionSeed: number,
   combatNumber: number,
   position: number,
-  maximumLevel: number
-): PlannedCombatEncounter {
+  maximumLevel: number,
+  rareEventChance: number,
+  rareEventPool: string
+): PlannedFinalEncounter {
   return {
-    kind: 'combat',
+    kind: 'final',
     position,
-    seed: deriveSeed(expeditionSeed, 'combat-final'),
+    seed: deriveSeed(expeditionSeed, 'final-slot'),
     combatNumber,
     level: maximumLevel,
     difficulty: 'upper-bound',
+    rareEventChance,
+    rareEventPool,
   };
 }
 
-function createNormalEvent(
+function createEventSlot(
   expeditionSeed: number,
   eventNumber: number,
-  position: number
+  position: number,
+  eventPool: string
 ): PlannedEventEncounter {
   return {
     kind: 'event',
     position,
     seed: deriveSeed(expeditionSeed, `event-${eventNumber}`),
     eventNumber,
-    rarity: 'normal',
-  };
-}
-
-function createRareEvent(
-  expeditionSeed: number,
-  eventNumber: number,
-  position: number
-): PlannedEventEncounter {
-  return {
-    kind: 'event',
-    position,
-    seed: deriveSeed(expeditionSeed, 'event-rare-final'),
-    eventNumber,
-    rarity: 'rare',
+    eventPool,
   };
 }
 
@@ -173,18 +165,13 @@ function assertInputs(
   if (
     !Number.isInteger(config.normalCombatCount) ||
     config.normalCombatCount < 1 ||
-    !Number.isInteger(config.normalEventCount) ||
-    config.normalEventCount < 0
+    !Array.isArray(config.normalEventPools) ||
+    config.normalEventPools.some((pool) => pool.length === 0)
   ) {
-    throw new Error('Encounter counts must be valid integers.');
+    throw new Error('Encounter configuration is invalid.');
   }
 
-  const maximumSeparatedEventCount =
-    config.rareEventChance === 0
-      ? config.normalCombatCount + 1
-      : config.normalCombatCount;
-
-  if (config.normalEventCount > maximumSeparatedEventCount) {
+  if (config.normalEventPools.length > config.normalCombatCount) {
     throw new Error('Encounter counts would force adjacent events.');
   }
 
@@ -194,5 +181,9 @@ function assertInputs(
     config.rareEventChance > 1
   ) {
     throw new Error('Rare event chance must be between 0 and 1.');
+  }
+
+  if (config.rareEventPool.length === 0) {
+    throw new Error('Rare event pool is required.');
   }
 }
