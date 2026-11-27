@@ -1,4 +1,4 @@
-# The Great Expedition
+# Veiled Frontier
 
 A daily strategy RPG for Reddit's 2026 Game of the Day Hackathon.
 

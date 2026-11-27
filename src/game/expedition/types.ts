@@ -5,8 +5,9 @@ export interface AreaLevelRange {
 
 export interface ExpeditionPlanConfig {
   normalCombatCount: number;
-  normalEventCount: number;
+  normalEventPools: string[];
   rareEventChance: number;
+  rareEventPool: string;
 }
 
 interface PlannedEncounterBase {
@@ -24,12 +25,22 @@ export interface PlannedCombatEncounter extends PlannedEncounterBase {
 export interface PlannedEventEncounter extends PlannedEncounterBase {
   kind: 'event';
   eventNumber: number;
-  rarity: 'normal' | 'rare';
+  eventPool: string;
+}
+
+export interface PlannedFinalEncounter extends PlannedEncounterBase {
+  kind: 'final';
+  combatNumber: number;
+  level: number;
+  difficulty: 'upper-bound';
+  rareEventChance: number;
+  rareEventPool: string;
 }
 
 export type PlannedEncounter =
   | PlannedCombatEncounter
-  | PlannedEventEncounter;
+  | PlannedEventEncounter
+  | PlannedFinalEncounter;
 
 export interface ExpeditionPlan {
   seed: number;

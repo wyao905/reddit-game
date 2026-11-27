@@ -4,6 +4,7 @@ import type {
   CombatOutcome,
   CombatantDefinition,
   CombatantState,
+  DamageType,
   EncounterDefinition,
 } from './types.js';
 
@@ -18,29 +19,36 @@ export function resolveCombat(
   assertEncounter(encounter);
 
   const random = createSeededRandom(seed);
-  const squad = encounter.squad.map(createState);
-  const enemies = encounter.enemies.map(createState);
+  const squad = encounter.squad.map((combatant) =>
+    createState(combatant, encounter.startingHealth)
+  );
+  const enemies = encounter.enemies.map((combatant) =>
+    createState(combatant, encounter.startingHealth)
+  );
   const log: CombatLogEntry[] = [];
   const maxRounds = encounter.maxRounds ?? DEFAULT_MAX_ROUNDS;
   let completedRounds = 0;
 
   for (let round = 1; round <= maxRounds; round += 1) {
     completedRounds = round;
-    clearTaunts(squad);
+    const turnOrder = [...squad, ...enemies].sort(
+      (left, right) => right.speed - left.speed
+    );
 
-    for (const member of squad) {
-      if (!isAlive(member) || !hasLiving(enemies)) continue;
-      takeSquadTurn(member, squad, enemies, round, random, log);
+    for (const actor of turnOrder) {
+      if (!isAlive(actor)) continue;
+
+      if (actor.side === 'squad') {
+        if (!hasLiving(enemies)) break;
+        actor.taunting = false;
+        takeSquadTurn(actor, squad, enemies, round, random, log);
+      } else {
+        if (!hasLiving(squad)) break;
+        takeEnemyTurn(actor, squad, round, random, log);
+      }
     }
 
-    if (!hasLiving(enemies)) break;
-
-    for (const enemy of enemies) {
-      if (!isAlive(enemy) || !hasLiving(squad)) continue;
-      takeEnemyTurn(enemy, squad, round, random, log);
-    }
-
-    if (!hasLiving(squad)) break;
+    if (!hasLiving(squad) || !hasLiving(enemies)) break;
   }
 
   return {
@@ -70,14 +78,20 @@ function takeSquadTurn(
   if (skill?.kind === 'heal') {
     const target = mostInjured(allies);
     if (target && target.health < target.maxHealth) {
-      const amount = Math.min(skill.healing, target.maxHealth - target.health);
+      const healing = Math.max(
+        1,
+        Math.round(actor.magic * skill.healingMultiplier)
+      );
+      const amount = Math.min(healing, target.maxHealth - target.health);
       target.health += amount;
       log.push({
         round,
         actorId: actor.id,
         action: skill.name,
         targetIds: [target.id],
+        effect: 'heal',
         amount,
+        targetHealthAfter: target.health,
         message: `${actor.name} uses ${skill.name}, restoring ${amount} health to ${target.name}.`,
       });
       return;
@@ -93,9 +107,22 @@ function takeSquadTurn(
     skill?.kind === 'damage' || skill?.kind === 'taunt'
       ? skill.name
       : 'Attack';
+  const damageType =
+    skill?.kind === 'damage' || skill?.kind === 'taunt'
+      ? skill.damageType
+      : actor.basicAttackType;
 
   if (skill?.kind === 'taunt') actor.taunting = true;
-  dealDamage(actor, target, multiplier, round, action, random, log);
+  dealDamage(
+    actor,
+    target,
+    multiplier,
+    damageType,
+    round,
+    action,
+    random,
+    log
+  );
 }
 
 function takeEnemyTurn(
@@ -107,21 +134,36 @@ function takeEnemyTurn(
 ): void {
   const taunting = squad.find((member) => isAlive(member) && member.taunting);
   const target = taunting ?? chooseLiving(squad, random);
-  dealDamage(actor, target, 1, round, 'Attack', random, log);
+  dealDamage(
+    actor,
+    target,
+    1,
+    actor.basicAttackType,
+    round,
+    'Attack',
+    random,
+    log
+  );
 }
 
 function dealDamage(
   actor: CombatantState,
   target: CombatantState,
   multiplier: number,
+  damageType: DamageType,
   round: number,
   action: string,
   random: RandomSource,
   log: CombatLogEntry[]
 ): void {
   const variance = DAMAGE_VARIANCE_MIN + random.next() * DAMAGE_VARIANCE_RANGE;
-  const rawDamage = actor.attack * multiplier * variance - target.defense * 0.5;
-  const amount = Math.max(1, Math.round(rawDamage));
+  const power = damageType === 'physical' ? actor.attack : actor.magic;
+  const mitigation =
+    damageType === 'physical' ? target.defense : target.resistance;
+  const rawDamage = power * multiplier * variance - mitigation * 0.5;
+  const critical = random.next() < actor.criticalChance;
+  const criticalMultiplier = critical ? actor.criticalDamage : 1;
+  const amount = Math.max(1, Math.round(rawDamage * criticalMultiplier));
   target.health = Math.max(0, target.health - amount);
 
   log.push({
@@ -129,8 +171,12 @@ function dealDamage(
     actorId: actor.id,
     action,
     targetIds: [target.id],
+    effect: 'damage',
     amount,
-    message: `${actor.name} uses ${action} on ${target.name} for ${amount} damage.`,
+    damageType,
+    critical,
+    targetHealthAfter: target.health,
+    message: `${actor.name} uses ${action} on ${target.name} for ${amount} ${damageType} damage${critical ? ' (critical)' : ''}.`,
   });
 }
 
@@ -155,12 +201,15 @@ function chooseLiving(
   return selected;
 }
 
-function createState(definition: CombatantDefinition): CombatantState {
-  return { ...definition, health: definition.maxHealth, taunting: false };
-}
-
-function clearTaunts(squad: CombatantState[]): void {
-  for (const member of squad) member.taunting = false;
+function createState(
+  definition: CombatantDefinition,
+  startingHealth: Record<string, number> | undefined
+): CombatantState {
+  return {
+    ...definition,
+    health: startingHealth?.[definition.id] ?? definition.maxHealth,
+    taunting: false,
+  };
 }
 
 function hasLiving(combatants: CombatantState[]): boolean {
@@ -180,9 +229,25 @@ function assertEncounter(encounter: EncounterDefinition): void {
     if (
       combatant.maxHealth <= 0 ||
       combatant.attack < 0 ||
-      combatant.defense < 0
+      combatant.defense < 0 ||
+      combatant.magic < 0 ||
+      combatant.resistance < 0 ||
+      combatant.speed < 0 ||
+      combatant.criticalChance < 0 ||
+      combatant.criticalChance > 1 ||
+      combatant.criticalDamage < 1
     ) {
       throw new Error(`Invalid combat stats for ${combatant.id}.`);
+    }
+
+    const startingHealth = encounter.startingHealth?.[combatant.id];
+    if (
+      startingHealth !== undefined &&
+      (!Number.isFinite(startingHealth) ||
+        startingHealth < 0 ||
+        startingHealth > combatant.maxHealth)
+    ) {
+      throw new Error(`Invalid starting health for ${combatant.id}.`);
     }
   }
 }

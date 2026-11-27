@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": false,
+    "outDir": "../dist/types/server",
+    "rootDir": "../src",
+    "tsBuildInfoFile": "../dist/types/server/tsconfig.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["../src/server/**/*"],
+  "references": [
+    { "path": "./tsconfig.game.json" },
+    { "path": "./tsconfig.shared.json" }
+  ]
+}

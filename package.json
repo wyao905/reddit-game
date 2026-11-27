@@ -1,15 +1,36 @@
 {
-  "name": "great-expedition",
+  "name": "veiled-frontier",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "build": "vite build",
+    "deploy": "npm run typecheck && npm test && devvit upload",
+    "dev": "devvit playtest",
+    "login": "devvit login",
+    "test": "vitest run src",
+    "test:watch": "vitest src",
+    "typecheck": "tsc --build"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@devvit/start": "0.15.4",
+    "@devvit/web": "0.15.4",
+    "devvit": "0.15.4",
+    "express": "5.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "vitest": "^5.1.1"
+    "@types/express": "5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.7",
+    "vitest": "5.1.1"
   }
 }
